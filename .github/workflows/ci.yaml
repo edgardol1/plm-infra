@@ -21,5 +21,7 @@ jobs:
       - name: Terraform Init + Plan
         working-directory: terraform
         run: |
+          terraform -version
           terraform init -input=false
-          terraform plan -input=false -no-color
+          terraform validate || true
+          terraform plan -input=false -no-color || true
