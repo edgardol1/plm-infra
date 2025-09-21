@@ -17,4 +17,4 @@ jobs:
       - name: Terraform Init
         run: terraform -chdir=terraform init -input=false
       - name: Terraform Plan
-        run: terraform -chdir=terraform plan -input=false -no-color || true
+        run: terraform -chdir=terraform plan -input=false -no-color -var "project_id=${{ secrets.GCP_PROJECT_ID }}" || true
