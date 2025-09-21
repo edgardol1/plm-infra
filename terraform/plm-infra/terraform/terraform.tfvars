@@ -1,0 +1,7 @@
+project_id    = "leadgen-plm-prod-01"
+region        = "us-central1"
+func_name     = "ec41-uploader"
+sa_caller     = "cf-caller"
+ci_user_email = "eddyleim@gmail.com"
+bq_dataset    = "leads"
+bq_table      = "events_booked_job"
