@@ -1,6 +1,6 @@
 terraform {
   backend "gcs" {
     bucket = "leadgen-plm-prod-01-tfstate"
-    prefix = "terraform/state"   # carpeta dentro del bucket
+    prefix = "tfstate/plm-infra"
   }
 }
