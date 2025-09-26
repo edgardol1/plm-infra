@@ -23,7 +23,7 @@ jobs:
           terraform_version: 1.7.5
 
       - name: Terraform Init
-        run: terraform -chdir=terraform init -reconfigure -input=false -no-color
+        run: terraform -chdir=terraform init -reconfigure -migrate-state -no-color
 
       - name: Terraform Validate
         run: terraform -chdir=terraform validate -no-color
