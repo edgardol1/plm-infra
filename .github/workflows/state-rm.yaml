@@ -1,5 +1,9 @@
 name: tf state rm
 on: workflow_dispatch
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   rm:
     runs-on: ubuntu-latest
@@ -10,7 +14,8 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
       - uses: hashicorp/setup-terraform@v3
-        with: { terraform_version: 1.7.5 }
+        with:
+          terraform_version: 1.7.5
       - name: Init
         run: terraform -chdir=terraform init -reconfigure -input=false -no-color
       - name: State rm
