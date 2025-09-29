@@ -10,7 +10,6 @@ permissions:
 env:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
-  # Fuerzo vacío para que no herede flags previos
   TF_CLI_ARGS_init: ""
   TF_CLI_ARGS: "-compact-warnings"
 
