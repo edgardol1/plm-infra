@@ -1,0 +1,53 @@
+name: Terraform CI/CD
+on:
+  push:
+    branches: [ main ]
+    paths: [ 'terraform/**', '.github/workflows/tf-ci.yml' ]
+  pull_request:
+    branches: [ main ]
+    paths: [ 'terraform/**', '.github/workflows/tf-ci.yml' ]
+env:
+  GOOGLE_PROJECT: leadgen-plm-prod-01
+  TF_WORKING_DIR: terraform
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    permissions: { id-token: write, contents: read }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/62450699138/locations/global/workloadIdentityPools/gh-pool/providers/gh-provider2
+          service_account: tf-plan-bot@leadgen-plm-prod-01.iam.gserviceaccount.com
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: 1.8.5 }
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init -input=false -upgrade
+      - name: Terraform Validate
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform validate
+      - name: Terraform Plan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform plan -input=false -out=tfplan.binary
+      - uses: actions/upload-artifact@v4
+        with: { name: tfplan, path: terraform/tfplan.binary }
+  apply:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [plan]
+    runs-on: ubuntu-latest
+    permissions: { id-token: write, contents: read }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/62450699138/locations/global/workloadIdentityPools/gh-pool/providers/gh-provider2
+          service_account: tf-plan-bot@leadgen-plm-prod-01.iam.gserviceaccount.com
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: 1.8.5 }
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init -input=false -upgrade
+      - name: Terraform Apply
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform apply -input=false -auto-approve
