@@ -10,3 +10,9 @@ override.tf.json
 *_override.tf.json
 .terraformrc
 terraform.rc
+# Terraform state
+terraform/*.tfstate
+terraform/*.tfstate.*
+.terraform/
+crash.log
+crash.*.log
