@@ -21,16 +21,22 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Pending decisions upkeep
+        if: github.event_name == 'push'
         run: ../.github/scripts/pending_decisions.sh
         working-directory: .
 
-      - uses: google-github-actions/auth@v2
+      - name: Auth to Google Cloud (WIF)
+        uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: "projects/62450699138/locations/global/workloadIdentityPools/gh-pool/providers/gh-provider2"
           service_account: "tf-plan-bot@leadgen-plm-prod-01.iam.gserviceaccount.com"
           token_format: "access_token"
+          create_credentials_file: true
+          export_environment_variables: true
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform
 
       - uses: google-github-actions/setup-gcloud@v2
+
       - uses: hashicorp/setup-terraform@v3
         with: { terraform_version: 1.13.3 }
 
