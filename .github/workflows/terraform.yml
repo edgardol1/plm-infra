@@ -11,13 +11,12 @@ env:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
   TF_CLI_ARGS_init: "-reconfigure -input=false"
+  TF_CLI_ARGS: "-compact-warnings"
 
 jobs:
   tf:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: terraform
+    defaults: { run: { working-directory: terraform } }
     steps:
       - uses: actions/checkout@v4
 
@@ -33,8 +32,10 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
       - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.13.3
+        with: { terraform_version: 1.13.3 }
+
+      - name: Terraform Fmt
+        run: terraform fmt -check -recursive
 
       - name: Terraform Init
         run: terraform init
@@ -51,9 +52,7 @@ jobs:
       - name: Upload Plan Artifact
         if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
-        with:
-          name: tfplan
-          path: terraform/tfplan
+        with: { name: tfplan, path: terraform/tfplan }
 
       - name: Terraform Apply (push a main)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
