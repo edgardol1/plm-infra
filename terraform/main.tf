@@ -1,3 +1,1 @@
-terraform {
-  required_version = ">= 1.6.0"
-}
+# no-op: infraestructura mínima para validar CI/CD
