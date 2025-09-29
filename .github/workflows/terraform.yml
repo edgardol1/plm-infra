@@ -1,0 +1,43 @@
+name: Terraform CI
+on:
+  pull_request: { branches: [ main ] }
+  push:         { branches: [ main ] }
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_CLI_ARGS_init: "-reconfigure -input=false"
+  TF_VAR_project_id: "leadgen-plm-prod-01"
+
+jobs:
+  tf:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: terraform } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: "projects/62450699138/locations/global/workloadIdentityPools/gh-pool/providers/gh-provider2"
+          service_account: "tf-plan-bot@leadgen-plm-prod-01.iam.gserviceaccount.com"
+          token_format: "access_token"
+      - uses: google-github-actions/setup-gcloud@v2
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: 1.13.3 }
+      - name: Terraform Init
+        run: terraform init
+      - name: Terraform Validate
+        run: terraform validate -no-color
+      - name: Terraform Plan
+        if: github.event_name == 'pull_request'
+        run: terraform plan -no-color -out=tfplan
+      - name: Upload Plan Artifact
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with: { name: tfplan, path: terraform/tfplan }
+      - name: Terraform Apply
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: terraform apply -auto-approve
