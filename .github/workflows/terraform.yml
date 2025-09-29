@@ -10,7 +10,8 @@ permissions:
 env:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
-  TF_CLI_ARGS_init: "-reconfigure -input=false"
+  # Fuerzo vacío para que no herede flags previos
+  TF_CLI_ARGS_init: ""
   TF_CLI_ARGS: "-compact-warnings"
 
 jobs:
@@ -38,7 +39,7 @@ jobs:
         run: terraform fmt -check -recursive
 
       - name: Terraform Init
-        run: terraform init
+        run: terraform init -reconfigure -no-color
 
       - name: Terraform Validate
         run: terraform validate -no-color
