@@ -33,13 +33,13 @@ resource "google_cloud_run_service_iam_member" "run_invoker" {
 # Impersonación para tu usuario
 resource "google_service_account_iam_member" "caller_token_creator" {
   service_account_id = google_service_account.caller.name
-  role   = "roles/iam.serviceAccountTokenCreator"
-  member = "user:${var.ci_user_email}"
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "user:${var.ci_user_email}"
 }
 resource "google_service_account_iam_member" "caller_user" {
   service_account_id = google_service_account.caller.name
-  role   = "roles/iam.serviceAccountUser"
-  member = "user:${var.ci_user_email}"
+  role               = "roles/iam.serviceAccountUser"
+  member             = "user:${var.ci_user_email}"
 }
 
 # Dataset y vista de panel
@@ -50,7 +50,7 @@ resource "google_bigquery_table" "vw_conversions" {
   dataset_id = google_bigquery_dataset.leads.dataset_id
   table_id   = "vw_conversions"
   view {
-    query = <<EOT
+    query          = <<EOT
 SELECT order_id, gclid, value, currency, ingested_at
 FROM \`${var.project_id}.${var.bq_dataset}.${var.bq_table}\`
 ORDER BY ingested_at DESC
