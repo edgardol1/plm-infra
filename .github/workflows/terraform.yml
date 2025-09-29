@@ -1,17 +1,16 @@
 name: Terraform CI
 on:
   pull_request: { branches: [ main ] }
-  push:         { branches: [ main ] }
+  push:         { branches: [ main, dev ] }
 
 permissions:
   id-token: write
-  contents: read
+  contents: write
 
 env:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
   TF_CLI_ARGS_init: "-reconfigure -input=false"
-  TF_VAR_project_id: "leadgen-plm-prod-01"
 
 jobs:
   tf:
@@ -19,6 +18,11 @@ jobs:
     defaults: { run: { working-directory: terraform } }
     steps:
       - uses: actions/checkout@v4
+
+      - name: Pending decisions upkeep
+        run: ../.github/scripts/pending_decisions.sh
+        working-directory: .
+
       - uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: "projects/62450699138/locations/global/workloadIdentityPools/gh-pool/providers/gh-provider2"
@@ -27,17 +31,23 @@ jobs:
       - uses: google-github-actions/setup-gcloud@v2
       - uses: hashicorp/setup-terraform@v3
         with: { terraform_version: 1.13.3 }
+
       - name: Terraform Init
         run: terraform init
+
       - name: Terraform Validate
         run: terraform validate -no-color
-      - name: Terraform Plan
+
+      - name: Terraform Plan (PRs)
         if: github.event_name == 'pull_request'
-        run: terraform plan -no-color -out=tfplan
+        run: |
+          VARFILE=$([[ "${{ github.ref }}" == "refs/heads/main" ]] && echo "prod.tfvars" || echo "dev.tfvars")
+          terraform plan -no-color -var-file="$VARFILE" -out=tfplan
       - name: Upload Plan Artifact
         if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with: { name: tfplan, path: terraform/tfplan }
-      - name: Terraform Apply
+
+      - name: Terraform Apply (push a main)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: terraform apply -auto-approve
+        run: terraform apply -auto-approve -var-file="prod.tfvars"
