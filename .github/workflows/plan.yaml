@@ -1,11 +1,19 @@
 name: terraform-plan
+
 on:
   pull_request:
-    paths: ['terraform/**','.github/**','scripts/**','Makefile']
+    branches: [ main ]
+    paths: [ 'terraform/**', '**/*.tf', '**/*.tfvars' ]
+  push:
+    branches: [ ci/wif-autonomous ]
+    paths: [ 'terraform/**', '**/*.tf', '**/*.tfvars' ]
+  workflow_dispatch:
+
 permissions:
   id-token: write
   contents: read
   pull-requests: write
+
 jobs:
   plan:
     runs-on: ubuntu-latest
@@ -16,45 +24,35 @@ jobs:
       TF_WORKDIR: terraform
     steps:
       - uses: actions/checkout@v4
-      - name: Check required secrets
-        id: chk
-        shell: bash
-        run: |
-          missing=()
-          [[ -z "${{ secrets.GCP_PROJECT_ID }}" ]] && missing+=("GCP_PROJECT_ID")
-          [[ -z "${{ secrets.GCP_WIF_PROVIDER }}" ]] && missing+=("GCP_WIF_PROVIDER")
-          [[ -z "${{ secrets.GCP_WIF_SA }}" ]] && missing+=("GCP_WIF_SA")
-          if (( ${#missing[@]} > 0 )); then
-            echo "HAS_SECRETS=false" >> $GITHUB_ENV
-            echo "::notice title=Missing secrets::Create GCP_PROJECT_ID, GCP_WIF_PROVIDER, GCP_WIF_SA"
-          else
-            echo "HAS_SECRETS=true" >> $GITHUB_ENV
-          fi
+
       - uses: hashicorp/setup-terraform@v3
-        with: { terraform_version: ${{ env.TF_VERSION }} }
-      - name: Auth via WIF
-        if: env.HAS_SECRETS == 'true'
-        uses: google-github-actions/auth@v2
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_WIF_SA }}
-      - name: Sanity auth
-        if: env.HAS_SECRETS == 'true'
-        run: gcloud auth list && gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
-      - name: Terraform fmt/validate/plan
-        if: env.HAS_SECRETS == 'true'
-        run: |
-          bash scripts/tf_fmt_check.sh | tee artifacts/validate.log
-          bash scripts/tf_plan_json.sh  | tee artifacts/plan.out.log
-      - name: Upload artifacts
-        if: env.HAS_SECRETS == 'true'
-        uses: actions/upload-artifact@v4
+
+      - name: gcloud project
+        run: gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Prepare artifacts dir
+        run: mkdir -p artifacts
+
+      - name: Terraform init
+        run: terraform -chdir=$TF_WORKDIR init -reconfigure -no-color | tee artifacts/init.log
+
+      - name: Terraform validate
+        run: terraform -chdir=$TF_WORKDIR validate -no-color | tee artifacts/validate.log
+
+      - name: Terraform plan
+        run: terraform -chdir=$TF_WORKDIR plan -no-color -out=tfplan -var "project_id=${{ secrets.GCP_PROJECT_ID }}" | tee artifacts/plan.log
+
+      - name: Plan JSON
+        run: terraform -chdir=$TF_WORKDIR show -json tfplan > artifacts/tfplan.json
+
+      - uses: actions/upload-artifact@v4
         with:
           name: tf-plan-${{ github.sha }}
-          path: |
-            artifacts/init.log
-            artifacts/validate.log
-            artifacts/plan.out.log
-            artifacts/tf.plan
-            artifacts/tfplan.json
-            artifacts/plan.summary.json
+          path: artifacts/**
