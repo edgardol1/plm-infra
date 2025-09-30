@@ -1,54 +1,39 @@
 name: Terraform CI
+
 on:
-  pull_request: { branches: [ main ] }
-  push:         { branches: [ main, dev ] }
-
-permissions:
-  id-token: write
-  contents: write
-
-env:
-  TF_IN_AUTOMATION: "true"
-  TF_INPUT: "false"
-  TF_CLI_ARGS_init: ""
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'terraform/**'
+      - '**/*.tf'
+      - '**/*.tfvars'
 
 jobs:
   tf:
     runs-on: ubuntu-latest
-    defaults: { run: { working-directory: terraform } }
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
       - uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: "projects/62450699138/locations/global/workloadIdentityPools/gh-pool/providers/gh-provider2"
-          service_account: "tf-plan-bot@leadgen-plm-prod-01.iam.gserviceaccount.com"
-          token_format: "access_token"
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-      - uses: google-github-actions/setup-gcloud@v2
       - uses: hashicorp/setup-terraform@v3
-        with: { terraform_version: 1.13.3 }
+        with:
+          terraform_version: 1.6.6
 
-      - name: Terraform Fmt
-        run: terraform fmt -check -recursive
+      - name: Terraform fmt
+        run: terraform -chdir=terraform fmt -check -diff
 
-      - name: Terraform Init
-        run: terraform init -reconfigure -no-color
+      - name: Terraform init
+        run: terraform -chdir=terraform init -reconfigure
 
-      - name: Terraform Validate
-        run: terraform validate -no-color
+      - name: Terraform validate
+        run: terraform -chdir=terraform validate
 
-      - name: Terraform Plan (PRs)
-        if: github.event_name == 'pull_request'
-        run: |
-          if [[ "${{ github.base_ref }}" == "main" ]]; then VARFILE="prod.tfvars"; else VARFILE="dev.tfvars"; fi
-          terraform plan -no-color -var-file="$VARFILE" -out=tfplan
-
-      - name: Upload Plan Artifact
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v4
-        with: { name: tfplan, path: terraform/tfplan }
-
-      - name: Terraform Apply (push a main)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: terraform apply -auto-approve -var-file="prod.tfvars"
+      - name: Terraform plan
+        run: terraform -chdir=terraform plan -lock=false -input=false -out=tfplan
