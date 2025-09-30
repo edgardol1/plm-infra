@@ -20,10 +20,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Pending decisions upkeep
-        run: ../.github/scripts/pending_decisions.sh
-        working-directory: .
-
       - uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: "projects/62450699138/locations/global/workloadIdentityPools/gh-pool/providers/gh-provider2"
