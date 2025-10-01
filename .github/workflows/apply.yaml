@@ -1,0 +1,63 @@
+
+name: terraform-apply
+
+on:
+  push:
+    branches: [ main ]
+    paths: [ 'terraform/**', '**/*.tf', '**/*.tfvars' ]
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Escribe APPLY"
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  apply:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm == 'APPLY' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: { name: production }
+    env:
+      TF_IN_AUTOMATION: 'true'
+      TF_INPUT: 'false'
+      TF_VERSION: '1.13.3'
+      TF_WORKDIR: terraform
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_WIF_SA }}
+
+      - name: gcloud project
+        run: gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Prepare artifacts dir
+        run: mkdir -p artifacts
+
+      - name: Terraform init
+        run: terraform -chdir=$TF_WORKDIR init -reconfigure -no-color | tee artifacts/init.log
+
+      - name: Terraform validate
+        run: terraform -chdir=$TF_WORKDIR validate -no-color | tee artifacts/validate.log
+
+      - name: Terraform apply
+        run: terraform -chdir=$TF_WORKDIR apply -no-color -auto-approve -var "project_id=${{ secrets.GCP_PROJECT_ID }}" | tee artifacts/apply.log
+
+      - name: Export deploy URLs (opcional)
+        run: terraform -chdir=$TF_WORKDIR output -json > artifacts/deploy_urls.txt || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tf-apply-${{ github.sha }}
+          path: artifacts/**

@@ -1,0 +1,58 @@
+name: terraform-plan
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths: [ 'terraform/**', '**/*.tf', '**/*.tfvars' ]
+  push:
+    branches: [ ci/wif-autonomous ]
+    paths: [ 'terraform/**', '**/*.tf', '**/*.tfvars' ]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    env:
+      TF_IN_AUTOMATION: true
+      TF_INPUT: false
+      TF_VERSION: '1.13.3'
+      TF_WORKDIR: terraform
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_WIF_SA }}
+
+      - name: gcloud project
+        run: gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Prepare artifacts dir
+        run: mkdir -p artifacts
+
+      - name: Terraform init
+        run: terraform -chdir=$TF_WORKDIR init -reconfigure -no-color | tee artifacts/init.log
+
+      - name: Terraform validate
+        run: terraform -chdir=$TF_WORKDIR validate -no-color | tee artifacts/validate.log
+
+      - name: Terraform plan
+        run: terraform -chdir=$TF_WORKDIR plan -no-color -out=tfplan -var "project_id=${{ secrets.GCP_PROJECT_ID }}" | tee artifacts/plan.log
+
+      - name: Plan JSON
+        run: terraform -chdir=$TF_WORKDIR show -json tfplan > artifacts/tfplan.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tf-plan-${{ github.sha }}
+          path: artifacts/**
