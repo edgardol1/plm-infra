@@ -1,12 +1,20 @@
+# Terraform
 **/.terraform/*
 *.tfstate
 *.tfstate.*
 crash.log
-*.tfvars
-*.tfvars.json
 override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
-.terraformrc
-terraform.rc
+
+# Descargas locales accidentales
+terraform/*.zip
+terraform/LICENSE.txt
+
+# Artifacts locales (logs, planes, dumps)
+artifacts/*
+!artifacts/pending_decisions.md
+
+# Logs genéricos
+*.log
