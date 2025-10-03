@@ -18,3 +18,7 @@ artifacts/*
 
 # Logs genéricos
 *.log
+
+!artifacts/AGENT_PROMPT.md
+!artifacts/diff.patch
+override.tf*
