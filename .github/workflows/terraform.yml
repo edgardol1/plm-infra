@@ -1,4 +1,5 @@
 name: Terraform CI/CD
+
 on:
   pull_request:
     paths:
@@ -9,51 +10,93 @@ on:
     paths:
       - 'terraform/**'
       - '.github/workflows/terraform.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
   id-token: write
 
-env:
-  TF_IN_AUTOMATION: "true"
-  GOOGLE_PROJECT: "leadgen-plm-prod-01"
-  GOOGLE_REGION: "us-central1"
+concurrency:
+  group: terraform-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   plan:
-    if: github.event_name == 'pull_request'
+    name: terraform plan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: google-github-actions/auth@v2
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Auth (WIF)
+        uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: "projects/62450699138/locations/global/workloadIdentityPools/gh-pool/providers/gh-provider2"
-          service_account: "tf-plan-bot@leadgen-plm-prod-01.iam.gserviceaccount.com"
-      - uses: google-github-actions/setup-gcloud@v2
-      - uses: hashicorp/setup-terraform@v3
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT_EMAIL }}
+          token_format: access_token
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1.7.5
-      - run: terraform -chdir=terraform fmt -check
-      - run: terraform -chdir=terraform init -input=false
-      - run: terraform -chdir=terraform validate
-      - run: terraform -chdir=terraform plan -input=false -lock-timeout=5m -out=tfplan
-      - uses: actions/upload-artifact@v4
+          terraform_wrapper: false
+
+      - name: Show versions
+        run: |
+          terraform -version
+          gcloud -v || true
+
+      - name: Init
+        working-directory: terraform
+        run: terraform init -input=false
+
+      - name: Validate & Fmt (check)
+        working-directory: terraform
+        run: |
+          terraform fmt -check -recursive
+          terraform validate
+
+      - name: tfsec (SAST)
+        run: |
+          curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
+          tfsec --no-color ./terraform
+
+      - name: Plan
+        id: plan
+        working-directory: terraform
+        run: terraform plan -input=false -no-color -out=tfplan.bin
+
+      - name: Save plan artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: tfplan
-          path: terraform/tfplan
+          name: tfplan-${{ github.run_id }}
+          path: terraform/tfplan.bin
+          if-no-files-found: error
 
   apply:
+    name: terraform apply (main)
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: plan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: google-github-actions/auth@v2
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Auth (WIF)
+        uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: "projects/62450699138/locations/global/workloadIdentityPools/gh-pool/providers/gh-provider2"
-          service_account: "tf-plan-bot@leadgen-plm-prod-01.iam.gserviceaccount.com"
-      - uses: google-github-actions/setup-gcloud@v2
-      - uses: hashicorp/setup-terraform@v3
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT_EMAIL }}
+          token_format: access_token
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1.7.5
-      - run: terraform -chdir=terraform init -input=false
-      - run: terraform -chdir=terraform apply -input=false -auto-approve
+          terraform_wrapper: false
+
+      - name: Init
+        working-directory: terraform
+        run: terraform init -input=false
+
+      - name: Apply
+        working-directory: terraform
+        run: terraform apply -input=false -auto-approve
