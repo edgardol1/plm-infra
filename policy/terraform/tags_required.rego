@@ -1,5 +1,4 @@
 package terraform
-required := {"env","owner","cost_center"}
 deny[msg] {
   some i
   rc := input.resource_changes[i]
