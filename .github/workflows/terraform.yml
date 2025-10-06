@@ -16,7 +16,7 @@ on:
 
 jobs:
   plan:
-    name: terraform plan (pull_request)
+    name: terraform plan
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     defaults:
@@ -47,7 +47,7 @@ jobs:
           sudo mv bin/conftest /usr/local/bin/
 
       - name: Conftest (OPA policies)
-        run: conftest test plan.json -p ../policy/terraform || (echo "OPA violations detected"; exit 1)
+        run: conftest test plan.json -p ../policy/terraform
 
   apply_main:
     name: terraform apply (main)
