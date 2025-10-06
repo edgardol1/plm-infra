@@ -1,147 +1,73 @@
-
 name: Terraform CI/CD
 
-
-
 on:
-
   pull_request:
-
     branches: [ main ]
-
     paths:
-
       - 'terraform/**'
-
       - 'policy/**'
-
       - '.github/workflows/terraform.yml'
-
   push:
-
     branches: [ main ]
-
     paths:
-
       - 'terraform/**'
-
       - '.github/workflows/terraform.yml'
-
   workflow_dispatch:
 
-
-
 jobs:
-
   plan:
-
     name: terraform plan
-
     if: github.event_name == 'pull_request'
-
     runs-on: ubuntu-latest
-
     defaults:
-
       run:
-
         shell: bash
-
         working-directory: terraform
-
     steps:
-
       - name: Checkout
-
         uses: actions/checkout@v4
 
-
-
       - name: Setup Terraform
-
         uses: hashicorp/setup-terraform@v3
-
         with:
-
           terraform_version: 1.7.5
 
-
-
       - name: Terraform Init
-
         run: terraform init -input=false
-
-
 
       - name: Terraform Plan (binary)
-
         run: terraform plan -input=false -no-color -out=tfplan.bin || true
 
-
-
       - name: Export plan JSON
-
         run: terraform show -json tfplan.bin > plan.json || echo '{}' > plan.json
 
-
-
       - name: Install Conftest
-
         run: |
-
           curl -sL https://raw.githubusercontent.com/open-policy-agent/conftest/master/install/install.sh | sh
-
           sudo mv bin/conftest /usr/local/bin/
 
-
-
       - name: Conftest (OPA policies)
-
         run: conftest test plan.json -p ../policy/terraform
 
-
-
   apply_main:
-
     name: terraform apply (main)
-
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-
     runs-on: ubuntu-latest
-
     defaults:
-
       run:
-
         shell: bash
-
         working-directory: terraform
-
     steps:
-
       - name: Checkout
-
         uses: actions/checkout@v4
 
-
-
       - name: Setup Terraform
-
         uses: hashicorp/setup-terraform@v3
-
         with:
-
           terraform_version: 1.7.5
 
-
-
       - name: Terraform Init
-
         run: terraform init -input=false
 
-
-
       - name: Terraform Apply
-
         run: terraform apply -input=false -auto-approve || true
-
