@@ -66,6 +66,18 @@ jobs:
         run: terraform plan -input=false -no-color -out=tfplan.bin
 
       - name: Save plan artifact
+      - name: Export plan JSON
+        working-directory: terraform
+        run: terraform show -json tfplan.bin > plan.json
+
+      - name: Install Conftest
+        run: |
+          curl -sL https://raw.githubusercontent.com/open-policy-agent/conftest/master/install/install.sh | sh
+          sudo mv bin/conftest /usr/local/bin/
+
+      - name: Conftest (OPA policies)
+        working-directory: terraform
+        run: conftest test plan.json -p ../policy/terraform
         uses: actions/upload-artifact@v4
         with:
           name: tfplan-${{ github.run_id }}
