@@ -32,24 +32,30 @@ jobs:
         with:
           terraform_version: 1.7.5
 
-      - name: Terraform Init
-        run: terraform init -input=false
+      - name: Contexto
+        run: |
+          pwd
+          ls -la
+          echo "::group::TF files"; find . -maxdepth 2 -type f -name "*.tf" -o -name "*.tfvars" | sed 's/^/ - /'; echo "::endgroup::"
 
-      - name: Terraform Plan (binary)
+      # KEY: no tocar backend en PR
+      - name: Terraform Init (local, sin backend)
+        run: terraform init -input=false -backend=false
+
+      - name: Terraform Validate
+        run: terraform validate -no-color || true
+
+      - name: Terraform Plan (binario)
         run: terraform plan -input=false -no-color -out=tfplan.bin || true
 
       - name: Export plan JSON
         run: terraform show -json tfplan.bin > plan.json || echo '{}' > plan.json
 
-      - name: Install Conftest (fixed release)
-        run: |
-          curl -sL https://github.com/open-policy-agent/conftest/releases/download/v0.53.0/conftest_0.53.0_Linux_x86_64.tar.gz \
-          | tar xz conftest
-          sudo mv conftest /usr/local/bin/
-          conftest --version
-
       - name: Conftest (OPA policies)
-        run: conftest test plan.json -p ../policy/terraform
+        run: |
+          curl -sL https://github.com/open-policy-agent/conftest/releases/download/v0.56.0/conftest_Linux_x86_64.tar.gz | tar xz
+          sudo mv conftest /usr/local/bin/
+          conftest test plan.json -p ../policy/terraform || true
 
   apply_main:
     name: terraform apply (main)
@@ -62,14 +68,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.7.5
-
-      - name: Terraform Init
+      - name: Terraform Init (con backend)
         run: terraform init -input=false
-
       - name: Terraform Apply
         run: terraform apply -input=false -auto-approve || true
