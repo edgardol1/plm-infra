@@ -4,12 +4,16 @@ on:
   workflow_dispatch:
     inputs:
       projectId:
+        description: "GCP Project ID"
         required: true
         type: string
       dryRun:
+        description: "No subir artefactos (solo probar)"
         required: true
         type: boolean
+        default: true
       commands:
+        description: "Comandos a ejecutar en la carpeta terraform"
         required: true
         type: string
 
@@ -26,49 +30,55 @@ jobs:
         working-directory: terraform
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      # Auth GCP via WIF (usa tus secrets)
+      # ====== AUTENTICACIÓN WIF (siempre que haya projectId) ======
       - name: Auth (WIF)
+        if: ${{ inputs.projectId != '' }}
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          service_account:          ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          project_id:               ${{ inputs.projectId }}
 
       - name: Setup gcloud
+        if: ${{ inputs.projectId != '' }}
         uses: google-github-actions/setup-gcloud@v2
-        with:
-          project_id: ${{ inputs.projectId }}
 
+      # ====== TERRAFORM ======
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.7.5
 
-      # tfsec por tar.gz (evita fallo con sh)
+      # ====== TFSEC (arreglo: descarga directa del .tar.gz correcto) ======
       - name: Install tfsec
         run: |
-          set -e
-          curl -sSL https://github.com/aquasecurity/tfsec/releases/latest/download/tfsec-linux-amd64.tar.gz -o tfsec.tgz
-          tar -xzf tfsec.tgz
-          sudo mv tfsec /usr/local/bin/tfsec
+          set -euo pipefail
+          TMP=/tmp/tfsec.tgz
+          curl -sSLf -o "$TMP" \
+            https://github.com/aquasecurity/tfsec/releases/latest/download/tfsec-linux-amd64.tar.gz
+          sudo tar -xzf "$TMP" -C /usr/local/bin tfsec
           tfsec --version
 
-      # conftest por tar.gz
+      # ====== CONFTEST (descarga directa) ======
       - name: Install conftest
         run: |
-          set -e
-          curl -sSL https://github.com/open-policy-agent/conftest/releases/latest/download/conftest_Linux_x86_64.tar.gz -o conftest.tgz
-          sudo tar -xzf conftest.tgz -C /usr/local/bin conftest
+          set -euo pipefail
+          CT=/tmp/conftest.tgz
+          curl -sSLf -o "$CT" \
+            https://github.com/open-policy-agent/conftest/releases/latest/download/conftest_Linux_x86_64.tar.gz
+          sudo tar -xzf "$CT" -C /usr/local/bin conftest
           conftest --version
 
-      # Ejecuta lo que envíes desde "Run workflow"
+      # ====== TUS COMANDOS ======
       - name: Run commands
         run: ${{ inputs.commands }}
 
-      # Artefactos (acepta rutas con o sin prefijo)
+      # ====== ARTEFACTOS (solo si no es dryRun) ======
       - name: Upload artifacts
-        if: always()
+        if: ${{ always() && !inputs.dryRun }}
         uses: actions/upload-artifact@v4
         with:
           name: tf-artifacts
