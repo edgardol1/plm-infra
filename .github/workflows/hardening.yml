@@ -1,10 +1,11 @@
 name: Hardening CI/CD & OPA
+
 on:
   workflow_dispatch:
     inputs:
-      projectId: {required: true, type: string}
-      dryRun:    {required: true, type: boolean}
-      commands:  {required: true, type: string}
+      projectId: { required: true, type: string }
+      dryRun:    { required: true, type: boolean }
+      commands:  { required: true, type: string }
 
 permissions:
   contents: read
@@ -21,51 +22,52 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # (Opcional) Auth WIF si ya tienes provider y SA en secrets
       - name: Auth (WIF)
-        if: ${{ env.GCP_WIF_PROVIDER != '' && env.GCP_SA_EMAIL != '' }}
+        if: ${{ false }}
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ env.GCP_WIF_PROVIDER }}
-          service_account: ${{ env.GCP_SA_EMAIL }}
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SA_EMAIL }}
 
       - uses: google-github-actions/setup-gcloud@v2
-        if: ${{ env.GCP_WIF_PROVIDER != '' && env.GCP_SA_EMAIL != '' }}
 
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.7.5
 
+      # FIX: instalar tfsec con bash + tar.gz
       - name: Install tfsec
-        run: curl -sSL https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | sh
+        shell: bash
+        run: |
+          set -e
+          curl -sSL https://github.com/aquasecurity/tfsec/releases/latest/download/tfsec-linux-amd64.tar.gz -o tfsec.tgz
+          tar -xzf tfsec.tgz
+          sudo mv tfsec /usr/local/bin/tfsec
+          tfsec --version
 
+      # FIX: instalar conftest
       - name: Install conftest
+        shell: bash
         run: |
-          v=0.56.0
-          curl -sSL https://github.com/open-policy-agent/conftest/releases/download/v${v}/conftest_${v}_Linux_x86_64.tar.gz | tar xz
-          sudo mv conftest /usr/local/bin/
+          set -e
+          curl -sSL https://github.com/open-policy-agent/conftest/releases/latest/download/conftest_Linux_x86_64.tar.gz -o conftest.tgz
+          sudo tar -xzf conftest.tgz -C /usr/local/bin conftest
+          conftest --version
 
-      - name: Export ENV
-        run: |
-          echo "PROJECT_ID=${{ inputs.projectId }}" >> $GITHUB_ENV
-          echo "DRY_RUN=${{ inputs.dryRun }}" >> $GITHUB_ENV
+      # Ejecuta los comandos suministrados en el dispatch
+      - name: Run commands
+        run: ${{ inputs.commands }}
 
-      - name: Write commands
-        run: printf "%s\n" "${{ inputs.commands }}" > .commands.txt
-
-      - name: Runner
-        run: |
-          set -euo pipefail
-          while IFS= read -r line; do
-            [ -z "$line" ] && continue
-            echo ">>> $line"
-            bash -lc "$line"
-          done < .commands.txt
-
-      - uses: actions/upload-artifact@v4
+      # Subir artefactos sin romper por paths
+      - name: Upload artifacts
         if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: tf-plan-and-policy
+          name: tf-artifacts
           path: |
             terraform/tfplan.bin
             terraform/plan.json
+            tfplan.bin
+            plan.json
           if-no-files-found: warn
