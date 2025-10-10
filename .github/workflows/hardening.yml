@@ -3,9 +3,15 @@ name: Hardening CI/CD & OPA
 on:
   workflow_dispatch:
     inputs:
-      projectId: { required: true, type: string }
-      dryRun:    { required: true, type: boolean }
-      commands:  { required: true, type: string }
+      projectId:
+        required: true
+        type: string
+      dryRun:
+        required: true
+        type: boolean
+      commands:
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -22,23 +28,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # (Opcional) Auth WIF si ya tienes provider y SA en secrets
+      # Auth GCP via WIF (usa tus secrets)
       - name: Auth (WIF)
-        if: ${{ false }}
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
-          service_account: ${{ secrets.GCP_SA_EMAIL }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-      - uses: google-github-actions/setup-gcloud@v2
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ inputs.projectId }}
 
-      - uses: hashicorp/setup-terraform@v3
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.7.5
 
-      # FIX: instalar tfsec con bash + tar.gz
+      # tfsec por tar.gz (evita fallo con sh)
       - name: Install tfsec
-        shell: bash
         run: |
           set -e
           curl -sSL https://github.com/aquasecurity/tfsec/releases/latest/download/tfsec-linux-amd64.tar.gz -o tfsec.tgz
@@ -46,28 +54,27 @@ jobs:
           sudo mv tfsec /usr/local/bin/tfsec
           tfsec --version
 
-      # FIX: instalar conftest
+      # conftest por tar.gz
       - name: Install conftest
-        shell: bash
         run: |
           set -e
           curl -sSL https://github.com/open-policy-agent/conftest/releases/latest/download/conftest_Linux_x86_64.tar.gz -o conftest.tgz
           sudo tar -xzf conftest.tgz -C /usr/local/bin conftest
           conftest --version
 
-      # Ejecuta los comandos suministrados en el dispatch
+      # Ejecuta lo que envíes desde "Run workflow"
       - name: Run commands
         run: ${{ inputs.commands }}
 
-      # Subir artefactos sin romper por paths
+      # Artefactos (acepta rutas con o sin prefijo)
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: tf-artifacts
+          if-no-files-found: warn
           path: |
             terraform/tfplan.bin
             terraform/plan.json
             tfplan.bin
             plan.json
-          if-no-files-found: warn
