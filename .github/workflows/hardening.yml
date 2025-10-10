@@ -30,61 +30,44 @@ jobs:
         working-directory: terraform
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # ====== AUTENTICACIÓN WIF (siempre que haya projectId) ======
+      # ===== WIF Auth (usa tus secrets) =====
       - name: Auth (WIF)
-        if: ${{ inputs.projectId != '' }}
+        if: ${{ secrets.GCP_WIF_PROVIDER != '' && secrets.GCP_SERVICE_ACCOUNT != '' }}
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
-          service_account:          ${{ secrets.GCP_SERVICE_ACCOUNT }}
-          project_id:               ${{ inputs.projectId }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          project_id: ${{ inputs.projectId }}
 
       - name: Setup gcloud
-        if: ${{ inputs.projectId != '' }}
+        if: ${{ success() && secrets.GCP_WIF_PROVIDER != '' && secrets.GCP_SERVICE_ACCOUNT != '' }}
         uses: google-github-actions/setup-gcloud@v2
 
-      # ====== TERRAFORM ======
+      # ===== Terraform =====
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.7.5
 
-      # ====== TFSEC (arreglo: descarga directa del .tar.gz correcto) ======
-      - name: Install tfsec
+      # ===== tfsec (instalación tolerante a 404) =====
+      - name: Install tfsec (tolerant)
         run: |
           set -euo pipefail
-          TMP=/tmp/tfsec.tgz
-          curl -sSLf -o "$TMP" \
-            https://github.com/aquasecurity/tfsec/releases/latest/download/tfsec-linux-amd64.tar.gz
-          sudo tar -xzf "$TMP" -C /usr/local/bin tfsec
-          tfsec --version
+          OS=linux
+          ARCH="$(uname -m)"
+          case "$ARCH" in
+            x86_64) ARCH=amd64 ;;
+            aarch64|arm64) ARCH=arm64 ;;
+            *) ARCH=amd64 ;;
+          esac
 
-      # ====== CONFTEST (descarga directa) ======
-      - name: Install conftest
-        run: |
-          set -euo pipefail
-          CT=/tmp/conftest.tgz
-          curl -sSLf -o "$CT" \
-            https://github.com/open-policy-agent/conftest/releases/latest/download/conftest_Linux_x86_64.tar.gz
-          sudo tar -xzf "$CT" -C /usr/local/bin conftest
-          conftest --version
+          URL1="https://github.com/aquasecurity/tfsec/releases/latest/download/tfsec-${OS}-${ARCH}.tar.gz"
+          URL2="https://github.com/aquasecurity/tfsec/releases/latest/download/tfsec-${OS}-amd64.tar.gz"
 
-      # ====== TUS COMANDOS ======
-      - name: Run commands
-        run: ${{ inputs.commands }}
-
-      # ====== ARTEFACTOS (solo si no es dryRun) ======
-      - name: Upload artifacts
-        if: ${{ always() && !inputs.dryRun }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: tf-artifacts
-          if-no-files-found: warn
-          path: |
-            terraform/tfplan.bin
-            terraform/plan.json
-            tfplan.bin
-            plan.json
+          echo "Descargando tfsec…"
+          if ! curl -fsSL "$URL1" -o tfsec.tgz; then
+            echo "URL1 falló/404, probando URL2…"
+            if ! curl -fsSL "$URL2" -o tfsec.tgz; then
+              echo "No se pudo descargar tfsec; continuo sin tfs
